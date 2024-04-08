@@ -80,14 +80,9 @@ class TwoLayerNet(object):
         #############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        Z1 = X.dot(W1) + b1
-        A1 = np.maximum(0, Z1)
-
-        Z2 = A1.dot(W2) + b2
-        A2 = Z2
-
-        scores = A2
-
+        first_layer_scores = X.dot(W1) + b1
+        hidden_layer_scores = np.maximum(first_layer_scores, 0)
+        scores = hidden_layer_scores.dot(W2) + b2
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
         # If the targets are not given then jump out, we're done
@@ -104,15 +99,16 @@ class TwoLayerNet(object):
         #############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        correct_class_scores = scores[range(N), y].reshape((N, 1))
-        correct_matrix = np.zeros(scores.shape)
-        correct_matrix[range(N), y] = 1
+        e_scores = np.exp(scores)
+        e_scores_sum = e_scores.sum(axis=1).reshape(-1, 1)
+        res_softmax = e_scores / e_scores_sum
 
-        scores_e = np.exp(scores)
-        scores_e_sum = np.sum(scores_e, axis=1).reshape((N, 1))
+        loss_contributors = res_softmax[range(N), y]
+        loss = -np.log(loss_contributors).sum() / N
 
-        loss = np.sum(-1 * correct_class_scores + np.log(scores_e_sum)) / N
-        loss += 0.5 * reg * (np.sum(W1 * W1) + np.sum(W2 * W2))
+        # Регуляризация
+        loss += reg * np.sum(W1 * W1)
+        loss += reg * np.sum(W2 * W2)
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
@@ -125,15 +121,24 @@ class TwoLayerNet(object):
         #############################################################################
         # *****START OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
-        B = np.full((N, 1), 1.0)
+        d_scores = res_softmax
+        d_scores[range(N), y] -= 1
+        d_scores /= N
 
-        dL = (scores_e / scores_e_sum - correct_matrix) / N
-        grads['W2'] = A1.T.dot(dL) + reg * W2
-        grads['b2'] = B.T.dot(dL)
+        grads['W2'] = hidden_layer_scores.T.dot(d_scores)
+        grads['b2'] = d_scores.sum(axis=0)
 
-        dA1 = dL.dot(W2.T) * (Z1 > 0)
-        grads['W1'] = X.T.dot(dA1) + reg * W1
-        grads['b1'] = B.T.dot(dA1)
+        d_hidden = d_scores.dot(W2.T)
+        d_didden_d_first_layer = np.zeros_like(first_layer_scores)
+        d_didden_d_first_layer[first_layer_scores > 0] = 1
+        d_first_layer_scores = d_hidden * d_didden_d_first_layer
+
+        grads['W1'] = X.T.dot(d_first_layer_scores)
+        grads['b1'] = d_first_layer_scores.sum(axis=0)
+
+        # Регуляризация
+        grads['W1'] += 2 * reg * W1
+        grads['W2'] += 2 * reg * W2
 
         # *****END OF YOUR CODE (DO NOT DELETE/MODIFY THIS LINE)*****
 
